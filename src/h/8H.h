@@ -39,7 +39,7 @@ public:
 	virtual void ElementStiffness(double* Matrix);
 
 //!	Calculate element gravity force
-	virtual void ElementGravity(double* bodyforce, double Gravity);
+	virtual double Gravity();
 
 //!	Calculate element stress
 	virtual void ElementStress(double* stress, double* Displacement);

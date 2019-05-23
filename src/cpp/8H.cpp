@@ -454,10 +454,6 @@ void C8H::ElementStiffness(double* Matrix)
 	}
 }
 
-void C8H::ElementGravity(double* bodyforce, double Gravity)
-{
-	clear(bodyforce,24);
-}
 
 //	Calculate element stress 
 void C8H::ElementStress(double* stress4, double* Displacement)
@@ -694,3 +690,8 @@ void  C8H::ElementPostInfo(double* stress, double* Displacement , double* PrePos
 
 }
 
+//Gravity
+double C8H::Gravity()
+{
+	return 0;
+}

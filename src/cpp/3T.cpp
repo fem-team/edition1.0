@@ -344,12 +344,8 @@ void C3T::ElementPostInfo(double* stress, double* Displacement, double* PrePosit
     }
 }
 
-
-
-	//Caculate Gravity of Elements
-
-
-
-	void C3T::ElementMass(double* Mass)
-	{
-	}
+//Gravity
+double C3T::Gravity()
+{
+	return 0;
+}

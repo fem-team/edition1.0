@@ -110,10 +110,10 @@ void CElementGroup::AllocateElements(std::size_t size)
             ElementList_ = new CBar[size];
             break;
 		case ElementTypes::T3:
-			MaterialList_ = new C3TMaterial[size];
+			ElementList_ = new C3T[size];
 			break;
 		case ElementTypes::H8:
-            MaterialList_ = new C8HMaterial[size];
+            ElementList_ = new C8H[size];
             break;
 		case ElementTypes::Q4:
 			ElementList_ = new CQ4[size];

@@ -39,19 +39,19 @@ public:
 	virtual void ElementStiffness(double* Matrix);
 
 	//!	Calculate element stiffness matrix 
-	virtual void ElementMass(double* Mass);
+	//virtual void ElementMass(double* Mass);
 
 	//!	Calculate element stress
 	virtual void ElementStress(double* stress, double* Displacement);
 
 	// Caculate Gravity of Elements
+	virtual double Gravity() ;
 
 	//!	Calculate element stress for plot
 
 	//!	Return the size of the element stiffness matrix (stored as an array column by column)
 	virtual unsigned int SizeOfStiffnessMatrix();
 
-	virtual void ElementPostInfo(double* stress, double* Displacement, double* PrePositions,
-                                double* PostPositions);
+	virtual void ElementPostInfo(double* stress, double* Displacement, double* PrePositions,double* PostPositions);
 };
 #pragma once
