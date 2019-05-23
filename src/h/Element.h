@@ -93,7 +93,7 @@ public:
 	virtual double Gravity() = 0;
 //  新加
 	inline unsigned int GetNEN() { return NEN_; }
-
+//后处理接口
 	virtual void ElementPostInfo(double* stress, double* Displacement, double* PrePositions, double* PostPositions){};
 
 

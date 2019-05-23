@@ -74,6 +74,9 @@ public:
 	//!	Output 5Q element data
 	void PrintQ5ElementData(unsigned int EleGrp);
 
+	//!	Output Shell element data
+	void PrintShellElementData(unsigned int EleGrp);
+
 //!	Output load data 
 	void OutputLoadInfo(); 
 

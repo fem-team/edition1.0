@@ -181,6 +181,9 @@ void COutputter::OutputElementInfo()
 			case ElementTypes::Plate:
 				PrintPlateElementData(EleGrp);
 				break;
+			case ElementTypes::Shell:
+				PrintShellElementData(EleGrp);
+				break;
 		}
 	}
 }
@@ -502,6 +505,46 @@ void COutputter::Print8HElementData(unsigned int EleGrp)
 	*this << endl;
 }
 
+// Print Shell element data
+void COutputter::PrintShellElementData(unsigned int EleGrp)
+{
+	CDomain* FEMData = CDomain::Instance();
+
+	CElementGroup& ElementGroup = FEMData->GetEleGrpList()[EleGrp];
+	unsigned int NUMMAT = ElementGroup.GetNUMMAT();
+
+	*this << " M A T E R I A L   D E F I N I T I O N" << endl
+		<< endl;
+	*this << " NUMBER OF DIFFERENT SETS OF MATERIAL" << endl;
+	*this << " AND CROSS-SECTIONAL  CONSTANTS  . . . .( NPAR(3) ) . . =" << setw(5) << NUMMAT
+		<< endl
+		<< endl;
+
+	*this << "  SET       YOUNG'S     POISSON'S     SHELL" << endl
+		<< " NUMBER     MODULUS          RATIO      THICKNESS" << endl
+		<< "               E              nu           h" << endl;
+
+	*this << setiosflags(ios::scientific) << setprecision(5);
+
+	//	Loop over for all property sets
+	for (unsigned int mset = 0; mset < NUMMAT; mset++)
+		ElementGroup.GetMaterial(mset).Write(*this, mset);
+
+	*this << endl
+		<< endl
+		<< " E L E M E N T   I N F O R M A T I O N" << endl;
+	*this << " ELEMENT     NODE     NODE     NODE     NODE       MATERIAL" << endl
+		<< " NUMBER-N      I        J        K        L         SET NUMBER" << endl;
+
+	unsigned int NUME = ElementGroup.GetNUME();
+
+	//	Loop over for all elements in group EleGrp
+	for (unsigned int Ele = 0; Ele < NUME; Ele++)
+		ElementGroup[Ele].Write(*this, Ele);
+
+	*this << endl;
+}
+
 //	Print load data
 void COutputter::OutputLoadInfo()
 {
@@ -716,7 +759,34 @@ void COutputter::OutputElementStress()
 
 				break;
 
+			case ElementTypes::Shell:
+				*this << "    ELEMENT   GAUSS P           GUASS POINTS DISPLACEMENTS"
+					<< "                       GUASS POINTS STRESSES"
+					<< endl;
+				*this << "     NUMBER    INDEX        W             Theta             ThetaY"
+					<< "               SX'X'_MAX     SY'Y'_MAX    SX'Y'_MAX"
+					<< endl;
 
+				double stressesS[15];
+				double Positions[15];
+
+				for (unsigned int Ele = 0; Ele < NUME; Ele++)
+				{
+					CElement& Element = EleGrp[Ele];
+					Element.ElementStress(stressesS, Displacement, Positions);
+
+					CPlateMaterial& material = *dynamic_cast<CPlateMaterial*>(Element.GetElementMaterial());
+					for (unsigned i = 0; i < 5; ++i) { // four nodal points
+						*this << setw(8) << Ele + 1;
+						*this << setw(10) << i + 1;
+						*this << setw(17) << Displacement[i * 3] << setw(14) << Displacement[i * 3 + 1] << setw(14) << Displacement[i * 3 + 2];
+						*this << setw(17) << stressesS[i * 3] << setw(14) << stressesS[i * 3 + 1] << setw(14) << stressesS[i * 3 + 2];
+						// *this << setw(32) << stresses[i] << std::endl;
+
+						*this << std::endl;
+					}
+
+				}
 			default: // Invalid element type
 				cerr << "*** Error *** Elment type " << ElementType
 					<< " has not been implemented.\n\n";

@@ -189,6 +189,24 @@ bool CQ5Material::Read(ifstream& Input, unsigned int mset)
 	return true;
 }
 
+bool CShellMaterial::Read(ifstream& Input, unsigned int mset)
+{
+	Input >> nset; // Number of property set
+
+	if (nset != mset + 1)
+	{
+		cerr << "*** Error *** Material sets must be inputted in order !" << endl
+			<< "    Expected set : " << mset + 1 << endl
+			<< "    Provided set : " << nset << endl;
+
+		return false;
+	}
+
+	Input >> E >> nu >> h; // Young's modulus and Poisson's ratio and height 
+
+	return true;
+}
+
 void CQ5Material::Write(COutputter& output, unsigned int mset)
 {
 	output << setw(5) << mset + 1 << setw(16) << E << setw(16) << nu << endl;
@@ -202,4 +220,9 @@ void CPlateMaterial::Write(COutputter& output, unsigned int mset)
 void CIEMMaterial::Write(COutputter& output, unsigned int mset)
 {
 	output << setw(5) << mset + 1 << setw(16) << E << setw(16) << nu << endl;
+}
+
+void CShellMaterial::Write(COutputter& output, unsigned int mset)
+{
+	output << setw(5) << mset + 1 << setw(16) << E << setw(16) << nu << setw(16) << h << endl;
 }

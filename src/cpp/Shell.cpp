@@ -9,7 +9,9 @@
 /*****************************************************************************/
 
 
-#include "Plate.h"
+#include "Shell.h"
+#include "Element.h"
+
 #include <cfloat>
 #include <cmath>
 #include <iomanip>
@@ -17,24 +19,21 @@
 using namespace std;
 
 //	Constructor
-CPlate::CPlate()
+CShell::CShell()
 {
-	NEN_ = 4; // Each element has 4 nodes_
+	NEN_ = 4; // Each element has 2 nodes
 	nodes_ = new CNode * [NEN_];
 
 	ND_ = 24;
-	LocationMatrix_ = new unsigned int[ND_];
+	LocationMatrix_ = new unsigned int[24];
 
 	ElementMaterial_ = nullptr;
 }
-
 //	Desconstructor
-CPlate::~CPlate()
-{
-}
+CShell::~CShell() {}
 
 //	Read element data from stream Input
-bool CPlate::Read(ifstream& Input, unsigned int Ele, CMaterial* MaterialSets, CNode* NodeList)
+bool CShell::Read(ifstream& Input, unsigned int Ele, CMaterial* MaterialSets, CNode* NodeList)
 {
 	unsigned int N;
 
@@ -53,7 +52,7 @@ bool CPlate::Read(ifstream& Input, unsigned int Ele, CMaterial* MaterialSets, CN
 	unsigned int N1, N2, N3, N4; // node numbers in counter-clock sequence
 
 	Input >> N1 >> N2 >> N3 >> N4 >> MSet;
-	ElementMaterial_ = dynamic_cast<CPlateMaterial*>(MaterialSets) + MSet - 1;
+	ElementMaterial_ = dynamic_cast<CShellMaterial*>(MaterialSets) + MSet - 1;
 	nodes_[0] = &NodeList[N1 - 1];
 	nodes_[1] = &NodeList[N2 - 1];
 	nodes_[2] = &NodeList[N3 - 1];
@@ -63,20 +62,17 @@ bool CPlate::Read(ifstream& Input, unsigned int Ele, CMaterial* MaterialSets, CN
 }
 
 // Write plate element data
-void CPlate::Write(COutputter& output, unsigned int Ele)
+void CShell::Write(COutputter& output, unsigned int Ele)
 {
-	output << setw(5) << Ele + 1
-		<< setw(11) << nodes_[0]->NodeNumber
-		<< setw(9) << nodes_[1]->NodeNumber
-		<< setw(9) << nodes_[2]->NodeNumber
-		<< setw(9) << nodes_[3]->NodeNumber
-		<< setw(12) << ElementMaterial_->nset << endl;
+	output << setw(5) << Ele + 1 << setw(11) << nodes_[0]->NodeNumber << setw(9)
+		<< nodes_[1]->NodeNumber << setw(9) << nodes_[2]->NodeNumber << setw(9)
+		<< nodes_[3]->NodeNumber << setw(12) << ElementMaterial_->nset << endl;
 }
 
 //  Generate location matrix: the global equation number that corresponding to each DOF of the
 //  element
 //	Caution:  Equation number is numbered from 1 !
-void CPlate::GenerateLocationMatrix()
+void CShell::GenerateLocationMatrix()
 {
 	unsigned int i = 0;
 	for (unsigned int N = 0; N < NEN_; N++)
@@ -85,15 +81,13 @@ void CPlate::GenerateLocationMatrix()
 }
 
 //	Return the size of the element stiffness matrix (stored as an array column by column)
-//	For 4 node plate element, element stiffness is a 24*24 matrix, whose upper triangular part
-//	has 300 elements
-unsigned int CPlate::SizeOfStiffnessMatrix() { return 300; }
-
-/*it makes me think of another question that when should the rotation dof turn to zero*/
+//	For 2 node bar element, element stiffness is a 6x6 matrix, whose upper triangular part
+//	has 21 elements
+unsigned int CShell::SizeOfStiffnessMatrix() { return 300; }
 
 //	Calculate element stiffness matrix
 //	Upper triangular matrix, stored as an array column by colum starting from the diagonal element
-void CPlate::ElementStiffness(double* Matrix)
+void CShell::ElementStiffness(double* Matrix)
 {
 	clear(Matrix, SizeOfStiffnessMatrix());
 
@@ -120,12 +114,12 @@ void CPlate::ElementStiffness(double* Matrix)
 	zdir[1] = xdir[2] * ydir[0] - xdir[0] * ydir[2];
 	zdir[2] = xdir[0] * ydir[1] - xdir[1] * ydir[0];
 
-	CPlateMaterial * material =static_cast<CPlateMaterial*>(ElementMaterial_); // Pointer to material of the element
+	CShellMaterial * material =dynamic_cast<CShellMaterial*>(ElementMaterial_); // Pointer to material of the element
 
 	double nu = material->nu;
 	const double k = material->E * material->h * material->h * material->h * 0.0833333333333333 /
 		(1 - nu * nu) * LX * LY / 4;
-
+	const double k2 = material->E / (1 - nu * nu) * material->h;
 	double xpsi = LX / 2;
 	double yeta = LY / 2;
 
@@ -642,13 +636,224 @@ void CPlate::ElementStiffness(double* Matrix)
 	Matrix[297] = MatrixLit[65] * zdir[2] * xdir[2] + MatrixLit[77] * zdir[2] * ydir[2];
 	Matrix[298] = MatrixLit[65] * zdir[1] * xdir[2] + MatrixLit[77] * zdir[1] * ydir[2];
 	Matrix[299] = MatrixLit[65] * zdir[0] * xdir[2] + MatrixLit[77] * zdir[0] * ydir[2];
+	/*#ifdef _DEBUG_
+		for (unsigned int i=0;i<78;++i)
+			{
+				cout<<"Matrix element "<<i<<" is "<<Matrix[i]<<endl;
+		};
+	#endif*/
+	double Matrix4Q[36];
+	Matrix4Q[0] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LY * LY) - 4.0 / (3 * (LX * LX)));
+	Matrix4Q[1] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LX * LX) - 4.0 / (3 * (LY * LY)));
+	Matrix4Q[2] = nu / 2 + 1.0 / 2;
+	Matrix4Q[3] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LY * LY) - 4.0 / (3 * (LX * LX)));
+	Matrix4Q[4] = 1.0 / 2 - (3 * nu) / 2;
+	Matrix4Q[5] = -LX * LY * ((nu / 3 - 1.0 / 3) / (LY * LY) + 4.0 / (3 * (LX * LX)));
+	Matrix4Q[6] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LX * LX) - 4.0 / (3 * (LY * LY)));
+	Matrix4Q[7] = -nu / 2 - 1.0 / 2;
+	Matrix4Q[8] = LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LX * LX) + 2.0 / (3 * (LY * LY)));
+	Matrix4Q[9] = (3 * nu) / 2 - 1.0 / 2;
+	Matrix4Q[10] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LY * LY) - 4.0 / (3 * (LX * LX)));
+	Matrix4Q[11] = 1.0 / 2 - (3 * nu) / 2;
+	Matrix4Q[12] = LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LY * LY) + 2.0 / (3 * (LX * LX)));
+	Matrix4Q[13] = -nu / 2 - 1.0 / 2;
+	Matrix4Q[14] = LX * LY * ((nu / 3 - 1.0 / 3) / (LY * LY) - 2.0 / (3 * (LX * LX)));
+	Matrix4Q[15] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LX * LX) - 4.0 / (3 * (LY * LY)));
+	Matrix4Q[16] = nu / 2 + 1.0 / 2;
+	Matrix4Q[17] = -LX * LY * ((nu / 3 - 1.0 / 3) / (LX * LX) + 4.0 / (3 * (LY * LY)));
+	Matrix4Q[18] = (3 * nu) / 2 - 1.0 / 2;
+	Matrix4Q[19] = LX * LY * ((nu / 3 - 1.0 / 3) / (LX * LX) - 2.0 / (3 * (LY * LY)));
+	Matrix4Q[20] = -nu / 2 - 1.0 / 2;
+	Matrix4Q[21] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LY * LY) - 4.0 / (3 * (LX * LX)));
+	Matrix4Q[22] = 1.0 / 2 - (3 * nu) / 2;
+	Matrix4Q[23] = -LX * LY * ((nu / 3 - 1.0 / 3) / (LY * LY) + 4.0 / (3 * (LX * LX)));
+	Matrix4Q[24] = nu / 2 + 1.0 / 2;
+	Matrix4Q[25] = LX * LY * ((nu / 3 - 1.0 / 3) / (LY * LY) - 2.0 / (3 * (LX * LX)));
+	Matrix4Q[26] = (3 * nu) / 2 - 1.0 / 2;
+	Matrix4Q[27] = LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LY * LY) + 2.0 / (3 * (LX * LX)));
+	Matrix4Q[28] = -LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LX * LX) - 4.0 / (3 * (LY * LY)));
+	Matrix4Q[29] = -nu / 2 - 1.0 / 2;
+	Matrix4Q[30] = LX * LY * (((2 * nu) / 3 - 2.0 / 3) / (LX * LX) + 2.0 / (3 * (LY * LY)));
+	Matrix4Q[31] = (3 * nu) / 2 - 1.0 / 2;
+	Matrix4Q[32] = LX * LY * ((nu / 3 - 1.0 / 3) / (LX * LX) - 2.0 / (3 * (LY * LY)));
+	Matrix4Q[33] = nu / 2 + 1.0 / 2;
+	Matrix4Q[34] = -LX * LY * ((nu / 3 - 1.0 / 3) / (LX * LX) + 4.0 / (3 * (LY * LY)));
+	Matrix4Q[35] = 1.0 / 2 - (3 * nu) / 2;
+
+	for (unsigned i = 0; i < 36; ++i)
+	{
+		Matrix4Q[i] *= (k2 * 0.25);
+	}
+
+#ifdef _DEBUG_
+	for (unsigned i = 0; i < 36; ++i)
+	{
+		cout << "Matrix4Q[" << i << "] = " << Matrix4Q[i] << endl;
+	}
+#endif
+	Matrix[0] += Matrix4Q[0] * xdir[0] * xdir[0] + Matrix4Q[2] * xdir[0] * ydir[0] +
+		Matrix4Q[2] * ydir[0] * xdir[0] + Matrix4Q[1] * ydir[0] * ydir[0];
+	Matrix[1] += Matrix4Q[0] * xdir[1] * xdir[1] + Matrix4Q[2] * xdir[1] * ydir[1] +
+		Matrix4Q[2] * ydir[1] * xdir[1] + Matrix4Q[1] * ydir[1] * ydir[1];
+	Matrix[2] += Matrix4Q[0] * xdir[0] * xdir[1] + Matrix4Q[2] * xdir[0] * ydir[1] +
+		Matrix4Q[2] * ydir[0] * xdir[1] + Matrix4Q[1] * ydir[0] * ydir[1];
+	Matrix[3] += Matrix4Q[0] * xdir[2] * xdir[2] + Matrix4Q[2] * xdir[2] * ydir[2] +
+		Matrix4Q[2] * ydir[2] * xdir[2] + Matrix4Q[1] * ydir[2] * ydir[2];
+	Matrix[4] += Matrix4Q[0] * xdir[1] * xdir[2] + Matrix4Q[2] * xdir[1] * ydir[2] +
+		Matrix4Q[2] * ydir[1] * xdir[2] + Matrix4Q[1] * ydir[1] * ydir[2];
+	Matrix[5] += Matrix4Q[0] * xdir[0] * xdir[2] + Matrix4Q[2] * xdir[0] * ydir[2] +
+		Matrix4Q[2] * ydir[0] * xdir[2] + Matrix4Q[1] * ydir[0] * ydir[2];
+	Matrix[21] += Matrix4Q[3] * xdir[0] * xdir[0] + Matrix4Q[7] * xdir[0] * ydir[0] +
+		Matrix4Q[7] * ydir[0] * xdir[0] + Matrix4Q[6] * ydir[0] * ydir[0];
+	Matrix[25] += Matrix4Q[5] * xdir[2] * xdir[0] + Matrix4Q[9] * xdir[2] * ydir[0] +
+		Matrix4Q[4] * ydir[2] * xdir[0] + Matrix4Q[8] * ydir[2] * ydir[0];
+	Matrix[26] += Matrix4Q[5] * xdir[1] * xdir[0] + Matrix4Q[9] * xdir[1] * ydir[0] +
+		Matrix4Q[4] * ydir[1] * xdir[0] + Matrix4Q[8] * ydir[1] * ydir[0];
+	Matrix[27] += Matrix4Q[5] * xdir[0] * xdir[0] + Matrix4Q[9] * xdir[0] * ydir[0] +
+		Matrix4Q[4] * ydir[0] * xdir[0] + Matrix4Q[8] * ydir[0] * ydir[0];
+	Matrix[28] += Matrix4Q[3] * xdir[1] * xdir[1] + Matrix4Q[7] * xdir[1] * ydir[1] +
+		Matrix4Q[7] * ydir[1] * xdir[1] + Matrix4Q[6] * ydir[1] * ydir[1];
+	Matrix[29] += Matrix4Q[3] * xdir[0] * xdir[1] + Matrix4Q[7] * xdir[0] * ydir[1] +
+		Matrix4Q[7] * ydir[0] * xdir[1] + Matrix4Q[6] * ydir[0] * ydir[1];
+	Matrix[33] += Matrix4Q[5] * xdir[2] * xdir[1] + Matrix4Q[9] * xdir[2] * ydir[1] +
+		Matrix4Q[4] * ydir[2] * xdir[1] + Matrix4Q[8] * ydir[2] * ydir[1];
+	Matrix[34] += Matrix4Q[5] * xdir[1] * xdir[1] + Matrix4Q[9] * xdir[1] * ydir[1] +
+		Matrix4Q[4] * ydir[1] * xdir[1] + Matrix4Q[8] * ydir[1] * ydir[1];
+	Matrix[35] += Matrix4Q[5] * xdir[0] * xdir[1] + Matrix4Q[9] * xdir[0] * ydir[1] +
+		Matrix4Q[4] * ydir[0] * xdir[1] + Matrix4Q[8] * ydir[0] * ydir[1];
+	Matrix[36] += Matrix4Q[3] * xdir[2] * xdir[2] + Matrix4Q[7] * xdir[2] * ydir[2] +
+		Matrix4Q[7] * ydir[2] * xdir[2] + Matrix4Q[6] * ydir[2] * ydir[2];
+	Matrix[37] += Matrix4Q[3] * xdir[1] * xdir[2] + Matrix4Q[7] * xdir[1] * ydir[2] +
+		Matrix4Q[7] * ydir[1] * xdir[2] + Matrix4Q[6] * ydir[1] * ydir[2];
+	Matrix[38] += Matrix4Q[3] * xdir[0] * xdir[2] + Matrix4Q[7] * xdir[0] * ydir[2] +
+		Matrix4Q[7] * ydir[0] * xdir[2] + Matrix4Q[6] * ydir[0] * ydir[2];
+	Matrix[42] += Matrix4Q[5] * xdir[2] * xdir[2] + Matrix4Q[9] * xdir[2] * ydir[2] +
+		Matrix4Q[4] * ydir[2] * xdir[2] + Matrix4Q[8] * ydir[2] * ydir[2];
+	Matrix[43] += Matrix4Q[5] * xdir[1] * xdir[2] + Matrix4Q[9] * xdir[1] * ydir[2] +
+		Matrix4Q[4] * ydir[1] * xdir[2] + Matrix4Q[8] * ydir[1] * ydir[2];
+	Matrix[44] += Matrix4Q[5] * xdir[0] * xdir[2] + Matrix4Q[9] * xdir[0] * ydir[2] +
+		Matrix4Q[4] * ydir[0] * xdir[2] + Matrix4Q[8] * ydir[0] * ydir[2];
+	Matrix[78] += Matrix4Q[10] * xdir[0] * xdir[0] + Matrix4Q[16] * xdir[0] * ydir[0] +
+		Matrix4Q[16] * ydir[0] * xdir[0] + Matrix4Q[15] * ydir[0] * ydir[0];
+	Matrix[82] += Matrix4Q[12] * xdir[2] * xdir[0] + Matrix4Q[18] * xdir[2] * ydir[0] +
+		Matrix4Q[11] * ydir[2] * xdir[0] + Matrix4Q[17] * ydir[2] * ydir[0];
+	Matrix[83] += Matrix4Q[12] * xdir[1] * xdir[0] + Matrix4Q[18] * xdir[1] * ydir[0] +
+		Matrix4Q[11] * ydir[1] * xdir[0] + Matrix4Q[17] * ydir[1] * ydir[0];
+	Matrix[84] += Matrix4Q[12] * xdir[0] * xdir[0] + Matrix4Q[18] * xdir[0] * ydir[0] +
+		Matrix4Q[11] * ydir[0] * xdir[0] + Matrix4Q[17] * ydir[0] * ydir[0];
+	Matrix[88] += Matrix4Q[14] * xdir[2] * xdir[0] + Matrix4Q[20] * xdir[2] * ydir[0] +
+		Matrix4Q[13] * ydir[2] * xdir[0] + Matrix4Q[19] * ydir[2] * ydir[0];
+	Matrix[89] += Matrix4Q[14] * xdir[1] * xdir[0] + Matrix4Q[20] * xdir[1] * ydir[0] +
+		Matrix4Q[13] * ydir[1] * xdir[0] + Matrix4Q[19] * ydir[1] * ydir[0];
+	Matrix[90] += Matrix4Q[14] * xdir[0] * xdir[0] + Matrix4Q[20] * xdir[0] * ydir[0] +
+		Matrix4Q[13] * ydir[0] * xdir[0] + Matrix4Q[19] * ydir[0] * ydir[0];
+	Matrix[91] += Matrix4Q[10] * xdir[1] * xdir[1] + Matrix4Q[16] * xdir[1] * ydir[1] +
+		Matrix4Q[16] * ydir[1] * xdir[1] + Matrix4Q[15] * ydir[1] * ydir[1];
+	Matrix[92] += Matrix4Q[10] * xdir[0] * xdir[1] + Matrix4Q[16] * xdir[0] * ydir[1] +
+		Matrix4Q[16] * ydir[0] * xdir[1] + Matrix4Q[15] * ydir[0] * ydir[1];
+	Matrix[96] += Matrix4Q[12] * xdir[2] * xdir[1] + Matrix4Q[18] * xdir[2] * ydir[1] +
+		Matrix4Q[11] * ydir[2] * xdir[1] + Matrix4Q[17] * ydir[2] * ydir[1];
+	Matrix[97] += Matrix4Q[12] * xdir[1] * xdir[1] + Matrix4Q[18] * xdir[1] * ydir[1] +
+		Matrix4Q[11] * ydir[1] * xdir[1] + Matrix4Q[17] * ydir[1] * ydir[1];
+	Matrix[98] += Matrix4Q[12] * xdir[0] * xdir[1] + Matrix4Q[18] * xdir[0] * ydir[1] +
+		Matrix4Q[11] * ydir[0] * xdir[1] + Matrix4Q[17] * ydir[0] * ydir[1];
+	Matrix[102] += Matrix4Q[14] * xdir[2] * xdir[1] + Matrix4Q[20] * xdir[2] * ydir[1] +
+		Matrix4Q[13] * ydir[2] * xdir[1] + Matrix4Q[19] * ydir[2] * ydir[1];
+	Matrix[103] += Matrix4Q[14] * xdir[1] * xdir[1] + Matrix4Q[20] * xdir[1] * ydir[1] +
+		Matrix4Q[13] * ydir[1] * xdir[1] + Matrix4Q[19] * ydir[1] * ydir[1];
+	Matrix[104] += Matrix4Q[14] * xdir[0] * xdir[1] + Matrix4Q[20] * xdir[0] * ydir[1] +
+		Matrix4Q[13] * ydir[0] * xdir[1] + Matrix4Q[19] * ydir[0] * ydir[1];
+	Matrix[105] += Matrix4Q[10] * xdir[2] * xdir[2] + Matrix4Q[16] * xdir[2] * ydir[2] +
+		Matrix4Q[16] * ydir[2] * xdir[2] + Matrix4Q[15] * ydir[2] * ydir[2];
+	Matrix[106] += Matrix4Q[10] * xdir[1] * xdir[2] + Matrix4Q[16] * xdir[1] * ydir[2] +
+		Matrix4Q[16] * ydir[1] * xdir[2] + Matrix4Q[15] * ydir[1] * ydir[2];
+	Matrix[107] += Matrix4Q[10] * xdir[0] * xdir[2] + Matrix4Q[16] * xdir[0] * ydir[2] +
+		Matrix4Q[16] * ydir[0] * xdir[2] + Matrix4Q[15] * ydir[0] * ydir[2];
+	Matrix[111] += Matrix4Q[12] * xdir[2] * xdir[2] + Matrix4Q[18] * xdir[2] * ydir[2] +
+		Matrix4Q[11] * ydir[2] * xdir[2] + Matrix4Q[17] * ydir[2] * ydir[2];
+	Matrix[112] += Matrix4Q[12] * xdir[1] * xdir[2] + Matrix4Q[18] * xdir[1] * ydir[2] +
+		Matrix4Q[11] * ydir[1] * xdir[2] + Matrix4Q[17] * ydir[1] * ydir[2];
+	Matrix[113] += Matrix4Q[12] * xdir[0] * xdir[2] + Matrix4Q[18] * xdir[0] * ydir[2] +
+		Matrix4Q[11] * ydir[0] * xdir[2] + Matrix4Q[17] * ydir[0] * ydir[2];
+	Matrix[117] += Matrix4Q[14] * xdir[2] * xdir[2] + Matrix4Q[20] * xdir[2] * ydir[2] +
+		Matrix4Q[13] * ydir[2] * xdir[2] + Matrix4Q[19] * ydir[2] * ydir[2];
+	Matrix[118] += Matrix4Q[14] * xdir[1] * xdir[2] + Matrix4Q[20] * xdir[1] * ydir[2] +
+		Matrix4Q[13] * ydir[1] * xdir[2] + Matrix4Q[19] * ydir[1] * ydir[2];
+	Matrix[119] += Matrix4Q[14] * xdir[0] * xdir[2] + Matrix4Q[20] * xdir[0] * ydir[2] +
+		Matrix4Q[13] * ydir[0] * xdir[2] + Matrix4Q[19] * ydir[0] * ydir[2];
+	Matrix[171] += Matrix4Q[21] * xdir[0] * xdir[0] + Matrix4Q[29] * xdir[0] * ydir[0] +
+		Matrix4Q[29] * ydir[0] * xdir[0] + Matrix4Q[28] * ydir[0] * ydir[0];
+	Matrix[175] += Matrix4Q[23] * xdir[2] * xdir[0] + Matrix4Q[31] * xdir[2] * ydir[0] +
+		Matrix4Q[22] * ydir[2] * xdir[0] + Matrix4Q[30] * ydir[2] * ydir[0];
+	Matrix[176] += Matrix4Q[23] * xdir[1] * xdir[0] + Matrix4Q[31] * xdir[1] * ydir[0] +
+		Matrix4Q[22] * ydir[1] * xdir[0] + Matrix4Q[30] * ydir[1] * ydir[0];
+	Matrix[177] += Matrix4Q[23] * xdir[0] * xdir[0] + Matrix4Q[31] * xdir[0] * ydir[0] +
+		Matrix4Q[22] * ydir[0] * xdir[0] + Matrix4Q[30] * ydir[0] * ydir[0];
+	Matrix[181] += Matrix4Q[25] * xdir[2] * xdir[0] + Matrix4Q[33] * xdir[2] * ydir[0] +
+		Matrix4Q[24] * ydir[2] * xdir[0] + Matrix4Q[32] * ydir[2] * ydir[0];
+	Matrix[182] += Matrix4Q[25] * xdir[1] * xdir[0] + Matrix4Q[33] * xdir[1] * ydir[0] +
+		Matrix4Q[24] * ydir[1] * xdir[0] + Matrix4Q[32] * ydir[1] * ydir[0];
+	Matrix[183] += Matrix4Q[25] * xdir[0] * xdir[0] + Matrix4Q[33] * xdir[0] * ydir[0] +
+		Matrix4Q[24] * ydir[0] * xdir[0] + Matrix4Q[32] * ydir[0] * ydir[0];
+	Matrix[187] += Matrix4Q[27] * xdir[2] * xdir[0] + Matrix4Q[35] * xdir[2] * ydir[0] +
+		Matrix4Q[26] * ydir[2] * xdir[0] + Matrix4Q[34] * ydir[2] * ydir[0];
+	Matrix[188] += Matrix4Q[27] * xdir[1] * xdir[0] + Matrix4Q[35] * xdir[1] * ydir[0] +
+		Matrix4Q[26] * ydir[1] * xdir[0] + Matrix4Q[34] * ydir[1] * ydir[0];
+	Matrix[189] += Matrix4Q[27] * xdir[0] * xdir[0] + Matrix4Q[35] * xdir[0] * ydir[0] +
+		Matrix4Q[26] * ydir[0] * xdir[0] + Matrix4Q[34] * ydir[0] * ydir[0];
+	Matrix[190] += Matrix4Q[21] * xdir[1] * xdir[1] + Matrix4Q[29] * xdir[1] * ydir[1] +
+		Matrix4Q[29] * ydir[1] * xdir[1] + Matrix4Q[28] * ydir[1] * ydir[1];
+	Matrix[191] += Matrix4Q[21] * xdir[0] * xdir[1] + Matrix4Q[29] * xdir[0] * ydir[1] +
+		Matrix4Q[29] * ydir[0] * xdir[1] + Matrix4Q[28] * ydir[0] * ydir[1];
+	Matrix[195] += Matrix4Q[23] * xdir[2] * xdir[1] + Matrix4Q[31] * xdir[2] * ydir[1] +
+		Matrix4Q[22] * ydir[2] * xdir[1] + Matrix4Q[30] * ydir[2] * ydir[1];
+	Matrix[196] += Matrix4Q[23] * xdir[1] * xdir[1] + Matrix4Q[31] * xdir[1] * ydir[1] +
+		Matrix4Q[22] * ydir[1] * xdir[1] + Matrix4Q[30] * ydir[1] * ydir[1];
+	Matrix[197] += Matrix4Q[23] * xdir[0] * xdir[1] + Matrix4Q[31] * xdir[0] * ydir[1] +
+		Matrix4Q[22] * ydir[0] * xdir[1] + Matrix4Q[30] * ydir[0] * ydir[1];
+	Matrix[201] += Matrix4Q[25] * xdir[2] * xdir[1] + Matrix4Q[33] * xdir[2] * ydir[1] +
+		Matrix4Q[24] * ydir[2] * xdir[1] + Matrix4Q[32] * ydir[2] * ydir[1];
+	Matrix[202] += Matrix4Q[25] * xdir[1] * xdir[1] + Matrix4Q[33] * xdir[1] * ydir[1] +
+		Matrix4Q[24] * ydir[1] * xdir[1] + Matrix4Q[32] * ydir[1] * ydir[1];
+	Matrix[203] += Matrix4Q[25] * xdir[0] * xdir[1] + Matrix4Q[33] * xdir[0] * ydir[1] +
+		Matrix4Q[24] * ydir[0] * xdir[1] + Matrix4Q[32] * ydir[0] * ydir[1];
+	Matrix[207] += Matrix4Q[27] * xdir[2] * xdir[1] + Matrix4Q[35] * xdir[2] * ydir[1] +
+		Matrix4Q[26] * ydir[2] * xdir[1] + Matrix4Q[34] * ydir[2] * ydir[1];
+	Matrix[208] += Matrix4Q[27] * xdir[1] * xdir[1] + Matrix4Q[35] * xdir[1] * ydir[1] +
+		Matrix4Q[26] * ydir[1] * xdir[1] + Matrix4Q[34] * ydir[1] * ydir[1];
+	Matrix[209] += Matrix4Q[27] * xdir[0] * xdir[1] + Matrix4Q[35] * xdir[0] * ydir[1] +
+		Matrix4Q[26] * ydir[0] * xdir[1] + Matrix4Q[34] * ydir[0] * ydir[1];
+	Matrix[210] += Matrix4Q[21] * xdir[2] * xdir[2] + Matrix4Q[29] * xdir[2] * ydir[2] +
+		Matrix4Q[29] * ydir[2] * xdir[2] + Matrix4Q[28] * ydir[2] * ydir[2];
+	Matrix[211] += Matrix4Q[21] * xdir[1] * xdir[2] + Matrix4Q[29] * xdir[1] * ydir[2] +
+		Matrix4Q[29] * ydir[1] * xdir[2] + Matrix4Q[28] * ydir[1] * ydir[2];
+	Matrix[212] += Matrix4Q[21] * xdir[0] * xdir[2] + Matrix4Q[29] * xdir[0] * ydir[2] +
+		Matrix4Q[29] * ydir[0] * xdir[2] + Matrix4Q[28] * ydir[0] * ydir[2];
+	Matrix[216] += Matrix4Q[23] * xdir[2] * xdir[2] + Matrix4Q[31] * xdir[2] * ydir[2] +
+		Matrix4Q[22] * ydir[2] * xdir[2] + Matrix4Q[30] * ydir[2] * ydir[2];
+	Matrix[217] += Matrix4Q[23] * xdir[1] * xdir[2] + Matrix4Q[31] * xdir[1] * ydir[2] +
+		Matrix4Q[22] * ydir[1] * xdir[2] + Matrix4Q[30] * ydir[1] * ydir[2];
+	Matrix[218] += Matrix4Q[23] * xdir[0] * xdir[2] + Matrix4Q[31] * xdir[0] * ydir[2] +
+		Matrix4Q[22] * ydir[0] * xdir[2] + Matrix4Q[30] * ydir[0] * ydir[2];
+	Matrix[222] += Matrix4Q[25] * xdir[2] * xdir[2] + Matrix4Q[33] * xdir[2] * ydir[2] +
+		Matrix4Q[24] * ydir[2] * xdir[2] + Matrix4Q[32] * ydir[2] * ydir[2];
+	Matrix[223] += Matrix4Q[25] * xdir[1] * xdir[2] + Matrix4Q[33] * xdir[1] * ydir[2] +
+		Matrix4Q[24] * ydir[1] * xdir[2] + Matrix4Q[32] * ydir[1] * ydir[2];
+	Matrix[224] += Matrix4Q[25] * xdir[0] * xdir[2] + Matrix4Q[33] * xdir[0] * ydir[2] +
+		Matrix4Q[24] * ydir[0] * xdir[2] + Matrix4Q[32] * ydir[0] * ydir[2];
+	Matrix[228] += Matrix4Q[27] * xdir[2] * xdir[2] + Matrix4Q[35] * xdir[2] * ydir[2] +
+		Matrix4Q[26] * ydir[2] * xdir[2] + Matrix4Q[34] * ydir[2] * ydir[2];
+	Matrix[229] += Matrix4Q[27] * xdir[1] * xdir[2] + Matrix4Q[35] * xdir[1] * ydir[2] +
+		Matrix4Q[26] * ydir[1] * xdir[2] + Matrix4Q[34] * ydir[1] * ydir[2];
+	Matrix[230] += Matrix4Q[27] * xdir[0] * xdir[2] + Matrix4Q[35] * xdir[0] * ydir[2] +
+		Matrix4Q[26] * ydir[0] * xdir[2] + Matrix4Q[34] * ydir[0] * ydir[2];
 }
 
 //	Calculate element stress
 // Stress regulation is put aside for now
-void CPlate::ElementStress(double* stress, double* Displacement, double* position)
+void CShell::ElementStress(double* stress, double* Displacement, double* position)
 {
-	CPlateMaterial* material = dynamic_cast<CPlateMaterial*>(ElementMaterial_); // Pointer to material of the element
+	CShellMaterial* material =dynamic_cast<CShellMaterial*>(ElementMaterial_); // Pointer to material of the element
 
 	double xdir[3];
 	double ydir[3];
@@ -677,7 +882,8 @@ void CPlate::ElementStress(double* stress, double* Displacement, double* positio
 	double yeta = LY / 2;
 
 	double truedisp[24];
-	double dis[12]; // displacement of nodes_
+	double dis[12];      // displacement of nodes_
+	double dis_inner[8]; // displacement in the plane
 	for (unsigned i = 0; i <= 23; i++)
 	{
 		if (LocationMatrix_[i])
@@ -685,6 +891,12 @@ void CPlate::ElementStress(double* stress, double* Displacement, double* positio
 		else
 			truedisp[i] = 0.0;
 	};
+#ifdef _DEBUG_
+	for (unsigned int i = 0; i <= 23; i++)
+	{
+		cout << "truedisp" << i << '@' << truedisp[i] << endl;
+	}
+#endif
 	for (unsigned int i = 0; i < 4; i++)
 	{
 		dis[3 * i] = truedisp[6 * i] * zdir[0] + truedisp[6 * i + 1] * zdir[1] +
@@ -693,12 +905,16 @@ void CPlate::ElementStress(double* stress, double* Displacement, double* positio
 			truedisp[6 * i + 5] * xdir[2];
 		dis[3 * i + 2] = truedisp[6 * i + 3] * ydir[0] + truedisp[6 * i + 4] * ydir[1] +
 			truedisp[6 * i + 5] * ydir[2];
+		dis_inner[2 * i] = truedisp[6 * i] * xdir[0] + truedisp[6 * i + 1] * xdir[1] +
+			truedisp[6 * i + 2] * xdir[2];
+		dis_inner[2 * i + 1] = truedisp[6 * i] * ydir[0] + truedisp[6 * i + 1] * ydir[1] +
+			truedisp[6 * i + 2] * ydir[2];
 	}
 
 	double nu = material->nu;
 	double Jacobian = xpsi * yeta;
 	const double k = material->E * material->h * 0.5 / (1 - nu * nu);
-	/*the k is wrong!!!*/
+	double k2 = material->E / (1 - nu * nu);
 	double psix = yeta / Jacobian;
 	double etay = xpsi / Jacobian;
 
@@ -879,10 +1095,351 @@ void CPlate::ElementStress(double* stress, double* Displacement, double* positio
 	position[9] = xmid + sqrt(1.0 / 3) * (-xpsi);
 	position[10] = ymid + sqrt(1.0 / 3) * (yeta);
 	position[11] = zmid;
+	stress[12] = (0.5 / LX * (-dis_inner[0] + dis_inner[2] + dis_inner[4] - dis_inner[6]) +
+		nu * 0.5 / LY * (-dis_inner[1] - dis_inner[3] + dis_inner[5] + dis_inner[7])) *
+		k2;
+	stress[13] = (nu * 0.5 / LX * (-dis_inner[0] + dis_inner[2] + dis_inner[4] - dis_inner[6]) +
+		0.5 / LY * (-dis_inner[1] - dis_inner[3] + dis_inner[5] + dis_inner[7])) *
+		k2;
+	stress[14] = k2 * (1 - nu) * 0.5 *
+		(0.5 / LX * (-dis_inner[1] + dis_inner[3] + dis_inner[5] - dis_inner[7]) +
+			0.5 / LY * (-dis_inner[0] - dis_inner[2] + dis_inner[4] + dis_inner[6]));
+	position[12] = xmid;
+	position[13] = ymid;
+	position[14] = zmid;
 }
 
-double CPlate::Gravity()
+#ifdef _VIB_
+void CShell::ElementMass(double* mass) {
+}
+#endif
+void CShell::ElementPostInfo(double* stress2, double* Displacement, double* Positions4SE, double* PostPositions)
+{
+	CShellMaterial* material =dynamic_cast<CShellMaterial*>(ElementMaterial_); // Pointer to material of the element
+
+	clear(stress2, 48);
+	double xdir[3];
+	double ydir[3];
+	double zdir[3];
+	xdir[0] = (nodes_[1]->XYZ[0] - nodes_[0]->XYZ[0]);
+	xdir[1] = (nodes_[1]->XYZ[1] - nodes_[0]->XYZ[1]);
+	xdir[2] = (nodes_[1]->XYZ[2] - nodes_[0]->XYZ[2]);
+	ydir[0] = (nodes_[3]->XYZ[0] - nodes_[0]->XYZ[0]);
+	ydir[1] = (nodes_[3]->XYZ[1] - nodes_[0]->XYZ[1]);
+	ydir[2] = (nodes_[3]->XYZ[2] - nodes_[0]->XYZ[2]);
+	double LX2 = xdir[0] * xdir[0] + xdir[1] * xdir[1] + xdir[2] * xdir[2];
+	double LX = sqrt(LX2);
+	double LY2 = ydir[0] * ydir[0] + ydir[1] * ydir[1] + ydir[2] * ydir[2];
+	double LY = sqrt(LY2);
+	xdir[0] = xdir[0] / LX;
+	xdir[1] = xdir[1] / LX;
+	xdir[2] = xdir[2] / LX;
+	ydir[0] = ydir[0] / LY;
+	ydir[1] = ydir[1] / LY;
+	ydir[2] = ydir[2] / LY;
+	zdir[0] = xdir[1] * ydir[2] - xdir[2] * ydir[1];
+	zdir[1] = xdir[2] * ydir[0] - xdir[0] * ydir[2];
+	zdir[2] = xdir[0] * ydir[1] - xdir[1] * ydir[0];
+
+	double xpsi = LX / 2;
+	double yeta = LY / 2;
+
+	double truedisp[24];
+	double dis[12];      // displacement of nodes_
+	double dis_inner[8]; // displacement in the plane
+	for (unsigned i = 0; i <= 23; i++)
+	{
+		if (LocationMatrix_[i])
+			truedisp[i] = Displacement[LocationMatrix_[i] - 1];
+		else
+			truedisp[i] = 0.0;
+	};
+#ifdef _DEBUG_
+	for (unsigned int i = 0; i <= 23; i++)
+	{
+		cout << "truedisp" << i << '@' << truedisp[i] << endl;
+	}
+#endif
+	for (unsigned int i = 0; i < 4; i++)
+	{
+		dis[3 * i] = truedisp[6 * i] * zdir[0] + truedisp[6 * i + 1] * zdir[1] +
+			truedisp[6 * i + 2] * zdir[2];
+		dis[3 * i + 1] = truedisp[6 * i + 3] * xdir[0] + truedisp[6 * i + 4] * xdir[1] +
+			truedisp[6 * i + 5] * xdir[2];
+		dis[3 * i + 2] = truedisp[6 * i + 3] * ydir[0] + truedisp[6 * i + 4] * ydir[1] +
+			truedisp[6 * i + 5] * ydir[2];
+		dis_inner[2 * i] = truedisp[6 * i] * xdir[0] + truedisp[6 * i + 1] * xdir[1] +
+			truedisp[6 * i + 2] * xdir[2];
+		dis_inner[2 * i + 1] = truedisp[6 * i] * ydir[0] + truedisp[6 * i + 1] * ydir[1] +
+			truedisp[6 * i + 2] * ydir[2];
+		Positions4SE[3 * i] = nodes_[i]->XYZ[0] - zdir[0] * material->h * 0.5;
+		Positions4SE[3 * i + 1] = nodes_[i]->XYZ[1] - zdir[1] * material->h * 0.5;
+		Positions4SE[3 * i + 2] = nodes_[i]->XYZ[2] - zdir[2] * material->h * 0.5;
+		Positions4SE[3 * i + 12] = nodes_[i]->XYZ[0] + zdir[0] * material->h * 0.5;
+		Positions4SE[3 * i + 13] = nodes_[i]->XYZ[1] + zdir[1] * material->h * 0.5;
+		Positions4SE[3 * i + 14] = nodes_[i]->XYZ[2] + zdir[2] * material->h * 0.5;
+
+	}
+
+	double nu = material->nu;
+	double Jacobian = xpsi * yeta;
+
+	double k2 = material->E / (1 - nu * nu);
+	double psix = yeta / Jacobian;
+	double etay = xpsi / Jacobian;
+	double stress[15];
+	/*well it's just too complex a set of formulas...*/
+	stress[0] =
+		dis[0] * (psix * psix * 0.6830127018922193 + nu * etay * etay * 0.6830127018922193) +
+		dis[1] * yeta * (psix * psix * 0.0000000000000000 + nu * etay * etay * 1.0773502691896257) +
+		dis[2] * xpsi *
+		(psix * psix * -1.0773502691896257 + nu * etay * etay * 0.0000000000000000) +
+		dis[3] * (psix * psix * -0.6830127018922193 + nu * etay * etay * 0.1830127018922193) +
+		dis[4] * yeta * (psix * psix * 0.0000000000000000 + nu * etay * etay * 0.2886751345948129) +
+		dis[5] * xpsi *
+		(psix * psix * -0.2886751345948129 + nu * etay * etay * 0.0000000000000000) +
+		dis[6] * (psix * psix * -0.1830127018922193 + nu * etay * etay * -0.1830127018922193) +
+		dis[7] * yeta * (psix * psix * 0.0000000000000000 + nu * etay * etay * 0.0773502691896258) +
+		dis[8] * xpsi *
+		(psix * psix * -0.0773502691896258 + nu * etay * etay * 0.0000000000000000) +
+		dis[9] * (psix * psix * 0.1830127018922193 + nu * etay * etay * -0.6830127018922193) +
+		dis[10] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * 0.2886751345948129) +
+		dis[11] * xpsi *
+		(psix * psix * -0.2886751345948129 + nu * etay * etay * 0.0000000000000000);
+	stress[1] =
+		dis[0] * (nu * psix * psix * 0.6830127018922193 + etay * etay * 0.6830127018922193) +
+		dis[1] * yeta * (nu * psix * psix * 0.0000000000000000 + etay * etay * 1.0773502691896257) +
+		dis[2] * xpsi *
+		(nu * psix * psix * -1.0773502691896257 + etay * etay * 0.0000000000000000) +
+		dis[3] * (nu * psix * psix * -0.6830127018922193 + etay * etay * 0.1830127018922193) +
+		dis[4] * yeta * (nu * psix * psix * 0.0000000000000000 + etay * etay * 0.2886751345948129) +
+		dis[5] * xpsi *
+		(nu * psix * psix * -0.2886751345948129 + etay * etay * 0.0000000000000000) +
+		dis[6] * (nu * psix * psix * -0.1830127018922193 + etay * etay * -0.1830127018922193) +
+		dis[7] * yeta * (nu * psix * psix * 0.0000000000000000 + etay * etay * 0.0773502691896258) +
+		dis[8] * xpsi *
+		(nu * psix * psix * -0.0773502691896258 + etay * etay * 0.0000000000000000) +
+		dis[9] * (nu * psix * psix * 0.1830127018922193 + etay * etay * -0.6830127018922193) +
+		dis[10] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * 0.2886751345948129) +
+		dis[11] * xpsi *
+		(nu * psix * psix * -0.2886751345948129 + etay * etay * 0.0000000000000000);
+	stress[2] = dis[0] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[1] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[2] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[3] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[4] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[5] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[6] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[7] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[8] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[9] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[10] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[11] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129);
+	stress[3] =
+		dis[0] * (psix * psix * -0.6830127018922193 + nu * etay * etay * 0.1830127018922193) +
+		dis[1] * yeta * (psix * psix * 0.0000000000000000 + nu * etay * etay * 0.2886751345948129) +
+		dis[2] * xpsi * (psix * psix * 0.2886751345948129 + nu * etay * etay * 0.0000000000000000) +
+		dis[3] * (psix * psix * 0.6830127018922193 + nu * etay * etay * 0.6830127018922193) +
+		dis[4] * yeta * (psix * psix * 0.0000000000000000 + nu * etay * etay * 1.0773502691896257) +
+		dis[5] * xpsi * (psix * psix * 1.0773502691896257 + nu * etay * etay * 0.0000000000000000) +
+		dis[6] * (psix * psix * 0.1830127018922193 + nu * etay * etay * -0.6830127018922193) +
+		dis[7] * yeta * (psix * psix * 0.0000000000000000 + nu * etay * etay * 0.2886751345948129) +
+		dis[8] * xpsi * (psix * psix * 0.2886751345948129 + nu * etay * etay * 0.0000000000000000) +
+		dis[9] * (psix * psix * -0.1830127018922193 + nu * etay * etay * -0.1830127018922193) +
+		dis[10] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * 0.0773502691896258) +
+		dis[11] * xpsi * (psix * psix * 0.0773502691896258 + nu * etay * etay * 0.0000000000000000);
+	stress[4] =
+		dis[0] * (nu * psix * psix * -0.6830127018922193 + etay * etay * 0.1830127018922193) +
+		dis[1] * yeta * (nu * psix * psix * 0.0000000000000000 + etay * etay * 0.2886751345948129) +
+		dis[2] * xpsi * (nu * psix * psix * 0.2886751345948129 + etay * etay * 0.0000000000000000) +
+		dis[3] * (nu * psix * psix * 0.6830127018922193 + etay * etay * 0.6830127018922193) +
+		dis[4] * yeta * (nu * psix * psix * 0.0000000000000000 + etay * etay * 1.0773502691896257) +
+		dis[5] * xpsi * (nu * psix * psix * 1.0773502691896257 + etay * etay * 0.0000000000000000) +
+		dis[6] * (nu * psix * psix * 0.1830127018922193 + etay * etay * -0.6830127018922193) +
+		dis[7] * yeta * (nu * psix * psix * 0.0000000000000000 + etay * etay * 0.2886751345948129) +
+		dis[8] * xpsi * (nu * psix * psix * 0.2886751345948129 + etay * etay * 0.0000000000000000) +
+		dis[9] * (nu * psix * psix * -0.1830127018922193 + etay * etay * -0.1830127018922193) +
+		dis[10] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * 0.0773502691896258) +
+		dis[11] * xpsi * (nu * psix * psix * 0.0773502691896258 + etay * etay * 0.0000000000000000);
+	stress[5] = dis[0] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[1] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[2] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[3] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[4] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[5] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[6] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[7] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[8] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[9] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[10] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[11] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129);
+	stress[6] =
+		dis[0] * (psix * psix * -0.1830127018922193 + nu * etay * etay * -0.1830127018922193) +
+		dis[1] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -0.0773502691896258) +
+		dis[2] * xpsi * (psix * psix * 0.0773502691896258 + nu * etay * etay * 0.0000000000000000) +
+		dis[3] * (psix * psix * 0.1830127018922193 + nu * etay * etay * -0.6830127018922193) +
+		dis[4] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -0.2886751345948129) +
+		dis[5] * xpsi * (psix * psix * 0.2886751345948129 + nu * etay * etay * 0.0000000000000000) +
+		dis[6] * (psix * psix * 0.6830127018922193 + nu * etay * etay * 0.6830127018922193) +
+		dis[7] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -1.0773502691896257) +
+		dis[8] * xpsi * (psix * psix * 1.0773502691896257 + nu * etay * etay * 0.0000000000000000) +
+		dis[9] * (psix * psix * -0.6830127018922193 + nu * etay * etay * 0.1830127018922193) +
+		dis[10] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -0.2886751345948129) +
+		dis[11] * xpsi * (psix * psix * 0.2886751345948129 + nu * etay * etay * 0.0000000000000000);
+	stress[7] =
+		dis[0] * (nu * psix * psix * -0.1830127018922193 + etay * etay * -0.1830127018922193) +
+		dis[1] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -0.0773502691896258) +
+		dis[2] * xpsi * (nu * psix * psix * 0.0773502691896258 + etay * etay * 0.0000000000000000) +
+		dis[3] * (nu * psix * psix * 0.1830127018922193 + etay * etay * -0.6830127018922193) +
+		dis[4] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -0.2886751345948129) +
+		dis[5] * xpsi * (nu * psix * psix * 0.2886751345948129 + etay * etay * 0.0000000000000000) +
+		dis[6] * (nu * psix * psix * 0.6830127018922193 + etay * etay * 0.6830127018922193) +
+		dis[7] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -1.0773502691896257) +
+		dis[8] * xpsi * (nu * psix * psix * 1.0773502691896257 + etay * etay * 0.0000000000000000) +
+		dis[9] * (nu * psix * psix * -0.6830127018922193 + etay * etay * 0.1830127018922193) +
+		dis[10] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -0.2886751345948129) +
+		dis[11] * xpsi * (nu * psix * psix * 0.2886751345948129 + etay * etay * 0.0000000000000000);
+	stress[8] = dis[0] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[1] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[2] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[3] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[4] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[5] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[6] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[7] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[8] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[9] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[10] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[11] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129);
+	stress[9] =
+		dis[0] * (psix * psix * 0.1830127018922193 + nu * etay * etay * -0.6830127018922193) +
+		dis[1] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -0.2886751345948129) +
+		dis[2] * xpsi *
+		(psix * psix * -0.2886751345948129 + nu * etay * etay * 0.0000000000000000) +
+		dis[3] * (psix * psix * -0.1830127018922193 + nu * etay * etay * -0.1830127018922193) +
+		dis[4] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -0.0773502691896258) +
+		dis[5] * xpsi *
+		(psix * psix * -0.0773502691896258 + nu * etay * etay * 0.0000000000000000) +
+		dis[6] * (psix * psix * -0.6830127018922193 + nu * etay * etay * 0.1830127018922193) +
+		dis[7] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -0.2886751345948129) +
+		dis[8] * xpsi *
+		(psix * psix * -0.2886751345948129 + nu * etay * etay * 0.0000000000000000) +
+		dis[9] * (psix * psix * 0.6830127018922193 + nu * etay * etay * 0.6830127018922193) +
+		dis[10] * yeta *
+		(psix * psix * 0.0000000000000000 + nu * etay * etay * -1.0773502691896257) +
+		dis[11] * xpsi *
+		(psix * psix * -1.0773502691896257 + nu * etay * etay * 0.0000000000000000);
+	stress[10] =
+		dis[0] * (nu * psix * psix * 0.1830127018922193 + etay * etay * -0.6830127018922193) +
+		dis[1] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -0.2886751345948129) +
+		dis[2] * xpsi *
+		(nu * psix * psix * -0.2886751345948129 + etay * etay * 0.0000000000000000) +
+		dis[3] * (nu * psix * psix * -0.1830127018922193 + etay * etay * -0.1830127018922193) +
+		dis[4] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -0.0773502691896258) +
+		dis[5] * xpsi *
+		(nu * psix * psix * -0.0773502691896258 + etay * etay * 0.0000000000000000) +
+		dis[6] * (nu * psix * psix * -0.6830127018922193 + etay * etay * 0.1830127018922193) +
+		dis[7] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -0.2886751345948129) +
+		dis[8] * xpsi *
+		(nu * psix * psix * -0.2886751345948129 + etay * etay * 0.0000000000000000) +
+		dis[9] * (nu * psix * psix * 0.6830127018922193 + etay * etay * 0.6830127018922193) +
+		dis[10] * yeta *
+		(nu * psix * psix * 0.0000000000000000 + etay * etay * -1.0773502691896257) +
+		dis[11] * xpsi *
+		(nu * psix * psix * -1.0773502691896257 + etay * etay * 0.0000000000000000);
+	stress[11] = dis[0] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[1] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[2] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[3] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[4] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[5] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[6] * (+psix * etay * (1 - nu) * 0.5 * -0.5000000000000000) +
+		dis[7] * yeta * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[8] * xpsi * (+psix * etay * (1 - nu) * 0.5 * -0.2886751345948129) +
+		dis[9] * (+psix * etay * (1 - nu) * 0.5 * 0.5000000000000000) +
+		dis[10] * yeta * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129) +
+		dis[11] * xpsi * (+psix * etay * (1 - nu) * 0.5 * 0.2886751345948129);
+	for (unsigned int i = 0; i < 11; ++i)
+	{
+		stress[i] = stress[i] * k2;
+	}
+
+
+	stress[12] = (0.5 / LX * (-dis_inner[0] + dis_inner[2] + dis_inner[4] - dis_inner[6]) +
+		nu * 0.5 / LY * (-dis_inner[1] - dis_inner[3] + dis_inner[5] + dis_inner[7])) *
+		k2;
+	stress[13] = (nu * 0.5 / LX * (-dis_inner[0] + dis_inner[2] + dis_inner[4] - dis_inner[6]) +
+		0.5 / LY * (-dis_inner[1] - dis_inner[3] + dis_inner[5] + dis_inner[7])) *
+		k2;
+	stress[14] = k2 * (1 - nu) * 0.5 *
+		(0.5 / LX * (-dis_inner[1] + dis_inner[3] + dis_inner[5] - dis_inner[7]) +
+			0.5 / LY * (-dis_inner[0] - dis_inner[2] + dis_inner[4] + dis_inner[6]));
+
+	bool dir_oc = 0;
+	if (abs(xdir[2]) < FLT_EPSILON && abs(ydir[2]) < FLT_EPSILON) {
+		dir_oc = 1;
+	}
+	double stress_rates[12];
+	double pq = 1.0 + 0.5 * sqrt(3.0);
+	double mq = 1.0 - 0.5 * sqrt(3.0);
+	for (unsigned int i = 0; i < 3; ++i) {
+		stress_rates[i] = (pq * stress[i] - 0.5 * stress[3 + i] + mq * stress[6 + i] - 0.5 * stress[9 + i]);
+		stress_rates[i + 3] = (-0.5 * stress[i] + pq * stress[3 + i] - 0.5 * stress[6 + i] + mq * stress[9 + i]);
+		stress_rates[i + 6] = (mq * stress[i] - 0.5 * stress[3 + i] + pq * stress[6 + i] - 0.5 * stress[9 + i]);
+		stress_rates[i + 9] = (-0.5 * stress[i] + mq * stress[3 + i] - 0.5 * stress[6 + i] + pq * stress[9 + i]);
+	}
+	double stress_nodes_[48];
+	for (unsigned int i = 0; i < 4; ++i) {
+		stress_nodes_[6 * i] = stress[12] - material->h * 0.5 * stress_rates[3 * i];
+		stress_nodes_[6 * i + 1] = stress[13] - material->h * 0.5 * stress_rates[3 * i + 1];
+		stress_nodes_[6 * i + 2] = stress[14] - material->h * 0.5 * stress_rates[3 * i + 2];
+		stress_nodes_[6 * i + 3] = 0.0;
+		stress_nodes_[6 * i + 4] = 0.0;
+		stress_nodes_[6 * i + 5] = 0.0;
+		stress_nodes_[6 * i + 24] = stress[12] + material->h * 0.5 * stress_rates[3 * i];
+		stress_nodes_[6 * i + 25] = stress[13] + material->h * 0.5 * stress_rates[3 * i + 1];
+		stress_nodes_[6 * i + 26] = stress[14] + material->h * 0.5 * stress_rates[3 * i + 2];
+		stress_nodes_[6 * i + 27] = 0.0;
+		stress_nodes_[6 * i + 28] = 0.0;
+		stress_nodes_[6 * i + 29] = 0.0;
+	}
+	for (unsigned int i = 0; i < 8; ++i) {
+		stress2[6 * i] = stress_nodes_[6 * i] * xdir[0] * xdir[0] + stress_nodes_[6 * i + 1] * ydir[0] * ydir[0] + stress_nodes_[6 * i + 2] * xdir[0] * ydir[0] * 2;
+		stress2[6 * i + 1] = stress_nodes_[6 * i] * xdir[1] * xdir[1] + stress_nodes_[6 * i + 1] * ydir[1] * ydir[1] + stress_nodes_[6 * i + 2] * xdir[1] * ydir[1] * 2;
+		stress2[6 * i + 3] = stress_nodes_[6 * i] * xdir[0] * xdir[1] + stress_nodes_[6 * i + 1] * ydir[0] * ydir[1] + stress_nodes_[6 * i + 2] * (xdir[0] * ydir[1] + xdir[1] * ydir[0]);
+		stress2[6 * i + 2] = stress_nodes_[6 * i] * xdir[2] * xdir[2] + stress_nodes_[6 * i + 1] * ydir[2] * ydir[2] + stress_nodes_[6 * i + 2] * xdir[2] * ydir[2] * 2;
+		stress2[6 * i + 4] = stress_nodes_[6 * i] * xdir[2] * xdir[1] + stress_nodes_[6 * i + 1] * ydir[2] * ydir[1] + stress_nodes_[6 * i + 2] * (xdir[2] * ydir[1] + xdir[1] * ydir[2]);
+		stress2[6 * i + 5] = stress_nodes_[6 * i] * xdir[2] * xdir[0] + stress_nodes_[6 * i + 1] * ydir[2] * ydir[0] + stress_nodes_[6 * i + 2] * (xdir[2] * ydir[0] + xdir[0] * ydir[2]);
+	}
+	for (unsigned int i = 0; i < 4; ++i) {
+		PostPositions[3 * i] = Positions4SE[3 * i] + truedisp[6 * i];
+		PostPositions[3 * i + 1] = Positions4SE[3 * i + 1] + truedisp[6 * i + 1];
+		PostPositions[3 * i + 2] = Positions4SE[3 * i + 2] + truedisp[6 * i + 2];
+		PostPositions[3 * i + 12] = Positions4SE[3 * i + 12] + truedisp[6 * i];
+		PostPositions[3 * i + 13] = Positions4SE[3 * i + 13] + truedisp[6 * i + 1];
+		PostPositions[3 * i + 14] = Positions4SE[3 * i + 14] + truedisp[6 * i + 2];
+	}
+}
+
+double CShell::Gravity()
 {
 	return 0;
 }
-

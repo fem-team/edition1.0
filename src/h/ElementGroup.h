@@ -22,6 +22,7 @@
 #include "Q5.h"
 #include "Plate.h"
 #include "IEM.h"
+#include "Shell.h"
 #include "Material.h"
 #include "Node.h"
 
@@ -37,8 +38,8 @@ enum ElementTypes
     T3=3,     // 3T element
     H8=4,     // 8H element
     Beam=5,   // Beam element
-	Shell=6,   // Shell elment
-    Plate=7,  // Plate element
+	Plate = 6,  // Plate element
+	Shell=7,   // Shell elment
 	IEM=8,     // Infinite 4Q element 
 	Q5=9,       // 4Q + one mid point
 };
