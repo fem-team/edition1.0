@@ -23,14 +23,14 @@ bool CBarMaterial::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl 
+		cerr << "*** Error *** BarMaterial sets must be inputted in order !" << endl 
 			 << "    Expected set : " << mset + 1 << endl
 			 << "    Provided set : " << nset << endl;
 
 		return false;
 	}
 
-	Input >> E >> Area >> rho_3D;	// Young's modulus and section area
+	Input >> E >> Area ;	// Young's modulus and section area
 
 	return true;
 }
@@ -47,7 +47,7 @@ bool C3TMaterial::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl
+		cerr << "*** Error *** 3TMaterial sets must be inputted in order !" << endl
 			<< "    Expected set : " << mset + 1 << endl
 			<< "    Provided set : " << nset << endl;
 
@@ -70,7 +70,7 @@ bool C8HMaterial::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl 
+		cerr << "*** Error *** 8HMaterial sets must be inputted in order !" << endl 
 			 << "    Expected set : " << mset + 1 << endl
 			 << "    Provided set : " << nset << endl;
 
@@ -93,7 +93,7 @@ bool CQ4Material::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl 
+		cerr << "*** Error *** 4QMaterial sets must be inputted in order !" << endl 
 			 << "    Expected set : " << mset + 1 << endl
 			 << "    Provided set : " << nset << endl;
 
@@ -116,7 +116,7 @@ bool CBeamMaterial::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl 
+		cerr << "*** Error *** BeamMaterial sets must be inputted in order !" << endl 
 			 << "    Expected set : " << mset + 1 << endl
 			 << "    Provided set : " << nset << endl;
 
@@ -139,7 +139,7 @@ bool CPlateMaterial::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl
+		cerr << "*** Error *** PlateMaterial sets must be inputted in order !" << endl
 			<< "    Expected set : " << mset + 1 << endl
 			<< "    Provided set : " << nset << endl;
 
@@ -159,7 +159,7 @@ bool CIEMMaterial::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl
+		cerr << "*** Error *** IEMMaterial sets must be inputted in order !" << endl
 			<< "    Expected set : " << mset + 1 << endl
 			<< "    Provided set : " << nset << endl;
 
@@ -177,7 +177,7 @@ bool CQ5Material::Read(ifstream& Input, unsigned int mset)
 
 	if (nset != mset + 1)
 	{
-		cerr << "*** Error *** Material sets must be inputted in order !" << endl
+		cerr << "*** Error *** 5QMaterial sets must be inputted in order !" << endl
 			<< "    Expected set : " << mset + 1 << endl
 			<< "    Provided set : " << nset << endl;
 
